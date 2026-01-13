@@ -62,15 +62,23 @@ def hello():
 
 @app.post("/api/bookings")
 def create_booking(booking: Booking):
-    if db is None:
-        raise HTTPException(status_code=500, detail="Database not available")
-    try:
-        inserted_id = create_document("booking", booking)
-        booking_dict = booking.model_dump()
-        send_to_airtable(booking_dict)
-        return {"status": "ok", "id": inserted_id}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    booking_dict = booking.model_dump()
+    inserted_id = None
+
+    # Try to save to database if available
+    if db is not None:
+        try:
+            inserted_id = create_document("booking", booking)
+        except Exception as e:
+            print(f"Database error (non-fatal): {e}")
+
+    # Always send to Airtable
+    airtable_result = send_to_airtable(booking_dict)
+
+    if airtable_result is None and inserted_id is None:
+        raise HTTPException(status_code=500, detail="Failed to save booking")
+
+    return {"status": "ok", "id": inserted_id or "airtable-only"}
 
 @app.get("/api/bookings", response_model=List[dict])
 def list_bookings(limit: int = 50):
