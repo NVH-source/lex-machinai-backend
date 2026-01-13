@@ -1,64 +1,144 @@
-"""
-  Database Schemas
+import os
+  import requests
+  from fastapi import FastAPI, HTTPException
+  from fastapi.middleware.cors import CORSMiddleware
+  from pydantic import BaseModel
+  from typing import List
 
-  Define your MongoDB collection schemas here using Pydantic models.
-  These schemas are used for data validation in your application.
+  from database import db, create_document, get_documents
+  from schemas import Booking
 
-  Each Pydantic model represents a collection in your database.
-  Model name is converted to lowercase for the collection name:
-  - User -> "user" collection
-  - Product -> "product" collection
-  - BlogPost -> "blogs" collection
-  """
+  # Airtable configuration
+  AIRTABLE_API_KEY = os.getenv("AIRTABLE_API_KEY")
+  AIRTABLE_BASE_ID = os.getenv("AIRTABLE_BASE_ID", "appGjTxtqqtnevO6x")
+  AIRTABLE_TABLE_NAME = os.getenv("AIRTABLE_TABLE_NAME", "UNTZ UNTZ Investor CRM")
 
-  from pydantic import BaseModel, Field, EmailStr
-  from typing import Optional
+  def send_to_airtable(booking_data: dict):
+      """Send booking data to Airtable"""
+      if not AIRTABLE_API_KEY:
+          print("Warning: AIRTABLE_API_KEY not set, skipping Airtable")
+          return None
 
-  # Example schemas (replace with your own):
+      url = f"https://api.airtable.com/v0/{AIRTABLE_BASE_ID}/{AIRTABLE_TABLE_NAME}"
+      headers = {
+          "Authorization": f"Bearer {AIRTABLE_API_KEY}",
+          "Content-Type": "application/json"
+      }
 
-  class User(BaseModel):
+      # Map booking fields to Airtable columns
+      airtable_record = {
+          "fields": {
+              "Name": booking_data.get("name", ""),
+              "Full Name": booking_data.get("full_name", ""),
+              "Email": booking_data.get("email", ""),
+              "Company Website": booking_data.get("company_website", ""),
+              "Services": booking_data.get("services", ""),
+              "Timeline": booking_data.get("timeline", ""),
+              "Challenge": booking_data.get("challenge", ""),
+              "Budget": booking_data.get("budget", ""),
+              "Language": booking_data.get("language", "en")
+          }
+      }
+
+      try:
+          response = requests.post(url, json=airtable_record, headers=headers)
+          response.raise_for_status()
+          return response.json()
+      except Exception as e:
+          print(f"Airtable error: {e}")
+          return None
+
+  app = FastAPI()
+
+  app.add_middleware(
+      CORSMiddleware,
+      allow_origins=["*"],
+      allow_credentials=True,
+      allow_methods=["*"],
+      allow_headers=["*"],
+  )
+
+  @app.get("/")
+  def read_root():
+      return {"message": "Hello from FastAPI Backend!"}
+
+  @app.get("/api/hello")
+  def hello():
+      return {"message": "Hello from the backend API!"}
+
+  @app.post("/api/bookings")
+  def create_booking(booking: Booking):
       """
-      Users collection schema
-      Collection name: "user" (lowercase of class name)
+      Create a booking/consultation request.
+      Stores in MongoDB collection "booking" and sends to Airtable.
       """
-      name: str = Field(..., description="Full name")
-      email: str = Field(..., description="Email address")
-      address: str = Field(..., description="Address")
-      age: Optional[int] = Field(None, ge=0, le=120, description="Age in years")
-      is_active: bool = Field(True, description="Whether user is active")
+      if db is None:
+          raise HTTPException(status_code=500, detail="Database not available")
+      try:
+          inserted_id = create_document("booking", booking)
 
-  class Product(BaseModel):
+          # Also send to Airtable
+          booking_dict = booking.model_dump()
+          send_to_airtable(booking_dict)
+
+          return {"status": "ok", "id": inserted_id}
+      except Exception as e:
+          raise HTTPException(status_code=500, detail=str(e))
+
+  @app.get("/api/bookings", response_model=List[dict])
+  def list_bookings(limit: int = 50):
       """
-      Products collection schema
-      Collection name: "product" (lowercase of class name)
+      List recent booking/consultation requests.
       """
-      title: str = Field(..., description="Product title")
-      description: Optional[str] = Field(None, description="Product description")
-      price: float = Field(..., ge=0, description="Price in dollars")
-      category: str = Field(..., description="Product category")
-      in_stock: bool = Field(True, description="Whether product is in stock")
+      if db is None:
+          raise HTTPException(status_code=500, detail="Database not available")
+      try:
+          docs = get_documents("booking", {}, limit)
+          # Convert ObjectId to string
+          for d in docs:
+              if "_id" in d:
+                  d["_id"] = str(d["_id"])
+          return docs
+      except Exception as e:
+          raise HTTPException(status_code=500, detail=str(e))
 
-  # Add your own schemas here:
-  # --------------------------------------------------
+  @app.get("/test")
+  def test_database():
+      """Test endpoint to check if database is available and accessible"""
+      response = {
+          "backend": "✅ Running",
+          "database": "❌ Not Available",
+          "database_url": None,
+          "database_name": None,
+          "connection_status": "Not Connected",
+          "collections": []
+      }
 
-  class Booking(BaseModel):
-      """
-      Booking requests for diagnostic/consultation calls
-      Collection name: "booking"
-      """
-      # Contact details
-      name: str = Field(..., min_length=1, description="First name")
-      full_name: Optional[str] = Field(None, description="Last name")
-      email: EmailStr = Field(..., description="Work email")
-      company: Optional[str] = Field(None, description="Company name")
-      company_website: Optional[str] = Field(None, description="Company website URL")
-      phone: Optional[str] = Field(None, description="Phone number")
+      try:
+          if db is not None:
+              response["database"] = "✅ Available"
+              response["database_url"] = "✅ Configured"
+              response["database_name"] = db.name if hasattr(db, 'name') else "✅ Connected"
+              response["connection_status"] = "Connected"
+              try:
+                  collections = db.list_collection_names()
+                  response["collections"] = collections[:10]
+                  response["database"] = "✅ Connected & Working"
+              except Exception as e:
+                  response["database"] = f"⚠️  Connected but Error: {str(e)[:50]}"
+          else:
+              response["database"] = "⚠️  Available but not initialized"
 
-      # Project details
-      services: Optional[str] = Field(None, description="Services of interest")
-      timeline: Optional[str] = Field(None, description="Desired project timeline")
-      challenge: Optional[str] = Field(None, description="Primary business challenge")
-      budget: Optional[str] = Field(None, description="Estimated budget bracket")
+      except Exception as e:
+          response["database"] = f"❌ Error: {str(e)[:50]}"
 
-      # Localization
-      language: Optional[str] = Field(None, description="Language code (en|fr|nl)")
+      response["database_url"] = "✅ Set" if os.getenv("DATABASE_URL") else "❌ Not Set"
+      response["database_name"] = "✅ Set" if os.getenv("DATABASE_NAME") else "❌ Not Set"
+
+      return response
+
+
+  if __name__ == "__main__":
+      import uvicorn
+      port = int(os.getenv("PORT", 8000))
+      uvicorn.run(app, host="0.0.0.0", port=port)
