@@ -27,9 +27,7 @@ def send_to_airtable(booking_data: dict):
             "Email": booking_data.get("email", ""),
             "Company Website": booking_data.get("company_website", ""),
             "Service of Interest": booking_data.get("services", ""),
-            "Project Timeline": booking_data.get("timeline", ""),
-            "Business challenge you want to address with AI": booking_data.get("challenge", ""),
-            "Estimated Budget for this Project": booking_data.get("budget", "")
+            "Business challenge you want to address with AI": booking_data.get("challenge", "")
         }
     }
     try:
