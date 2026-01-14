@@ -25,6 +25,7 @@ def send_to_airtable(booking_data: dict):
         "fields": {
             "First Name": booking_data.get("name", ""),
             "Email": booking_data.get("email", ""),
+            "Phone": booking_data.get("phone", ""),
             "Company Website": booking_data.get("company_website", ""),
             "Service of Interest": booking_data.get("services", ""),
             "Business challenge you want to address with AI": booking_data.get("challenge", "")
