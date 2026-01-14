@@ -23,15 +23,13 @@ def send_to_airtable(booking_data: dict):
     }
     airtable_record = {
         "fields": {
-            "Name": booking_data.get("name", ""),
-            "Full Name": booking_data.get("full_name", ""),
+            "First Name": booking_data.get("name", ""),
             "Email": booking_data.get("email", ""),
             "Company Website": booking_data.get("company_website", ""),
-            "Services": booking_data.get("services", ""),
-            "Timeline": booking_data.get("timeline", ""),
-            "Challenge": booking_data.get("challenge", ""),
-            "Budget": booking_data.get("budget", ""),
-            "Language": booking_data.get("language", "en")
+            "Service of Interest": booking_data.get("services", ""),
+            "Project Timeline": booking_data.get("timeline", ""),
+            "Business challenge you want to address with AI": booking_data.get("challenge", ""),
+            "Estimated Budget for this Project": booking_data.get("budget", "")
         }
     }
     try:
